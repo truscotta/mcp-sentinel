@@ -1,0 +1,28 @@
+name: 🚀 Feature / Integration Request
+description: Suggest an enterprise governance feature, framework adapter, or FinOps capability.
+title: "[Feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Production Problem or Governance Gap
+      description: What production failure mode, compliance requirement (SOC2 / HIPAA / EU AI Act), or workflow bottleneck does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API / CLI / Policy UX
+      description: Sketch how this would look in `sentinel.json`, the CLI, or the TypeScript SDK while keeping `0` runtime dependencies.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Architectural Alignment
+      options:
+        - label: Preserves the Zero-Dependency Runtime invariant (`0` external npm packages)
+        - label: Active GitHub Sponsor requesting roadmap prioritization
