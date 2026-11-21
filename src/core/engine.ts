@@ -119,49 +119,94 @@ export function mergeSentinelPolicy(rawConfig: unknown): Result<SentinelPolicy, 
       ? (rawConfig.splRules as unknown as SentinelPolicy['splRules'])
       : DEFAULT_SENTINEL_POLICY.splRules,
     firewall: isJsonObject(rawConfig.firewall)
-      ? { ...DEFAULT_SENTINEL_POLICY.firewall, ...(rawConfig.firewall as Partial<SentinelPolicy['firewall']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.firewall,
+          ...(rawConfig.firewall as Partial<SentinelPolicy['firewall']>),
+        }
       : DEFAULT_SENTINEL_POLICY.firewall,
     rateLimiter: isJsonObject(rawConfig.rateLimiter)
-      ? { ...DEFAULT_SENTINEL_POLICY.rateLimiter, ...(rawConfig.rateLimiter as Partial<SentinelPolicy['rateLimiter']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.rateLimiter,
+          ...(rawConfig.rateLimiter as Partial<SentinelPolicy['rateLimiter']>),
+        }
       : DEFAULT_SENTINEL_POLICY.rateLimiter,
     circuitBreaker: isJsonObject(rawConfig.circuitBreaker)
-      ? { ...DEFAULT_SENTINEL_POLICY.circuitBreaker, ...(rawConfig.circuitBreaker as Partial<SentinelPolicy['circuitBreaker']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.circuitBreaker,
+          ...(rawConfig.circuitBreaker as Partial<SentinelPolicy['circuitBreaker']>),
+        }
       : DEFAULT_SENTINEL_POLICY.circuitBreaker,
     idempotency: isJsonObject(rawConfig.idempotency)
-      ? { ...DEFAULT_SENTINEL_POLICY.idempotency, ...(rawConfig.idempotency as Partial<SentinelPolicy['idempotency']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.idempotency,
+          ...(rawConfig.idempotency as Partial<SentinelPolicy['idempotency']>),
+        }
       : DEFAULT_SENTINEL_POLICY.idempotency,
     schemaLock: isJsonObject(rawConfig.schemaLock)
-      ? { ...DEFAULT_SENTINEL_POLICY.schemaLock, ...(rawConfig.schemaLock as Partial<SentinelPolicy['schemaLock']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.schemaLock,
+          ...(rawConfig.schemaLock as Partial<SentinelPolicy['schemaLock']>),
+        }
       : DEFAULT_SENTINEL_POLICY.schemaLock,
     injectionShield: isJsonObject(rawConfig.injectionShield)
-      ? { ...DEFAULT_SENTINEL_POLICY.injectionShield, ...(rawConfig.injectionShield as Partial<SentinelPolicy['injectionShield']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.injectionShield,
+          ...(rawConfig.injectionShield as Partial<SentinelPolicy['injectionShield']>),
+        }
       : DEFAULT_SENTINEL_POLICY.injectionShield,
     deception: isJsonObject(rawConfig.deception)
-      ? { ...DEFAULT_SENTINEL_POLICY.deception, ...(rawConfig.deception as Partial<SentinelPolicy['deception']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.deception,
+          ...(rawConfig.deception as Partial<SentinelPolicy['deception']>),
+        }
       : DEFAULT_SENTINEL_POLICY.deception,
     lattice: isJsonObject(rawConfig.lattice)
-      ? { ...DEFAULT_SENTINEL_POLICY.lattice, ...(rawConfig.lattice as Partial<SentinelPolicy['lattice']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.lattice,
+          ...(rawConfig.lattice as Partial<SentinelPolicy['lattice']>),
+        }
       : DEFAULT_SENTINEL_POLICY.lattice,
     intelligence: isJsonObject(rawConfig.intelligence)
-      ? { ...DEFAULT_SENTINEL_POLICY.intelligence, ...(rawConfig.intelligence as Partial<SentinelPolicy['intelligence']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.intelligence,
+          ...(rawConfig.intelligence as Partial<SentinelPolicy['intelligence']>),
+        }
       : DEFAULT_SENTINEL_POLICY.intelligence,
     vault: isJsonObject(rawConfig.vault)
-      ? { ...DEFAULT_SENTINEL_POLICY.vault, ...(rawConfig.vault as Partial<SentinelPolicy['vault']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.vault,
+          ...(rawConfig.vault as Partial<SentinelPolicy['vault']>),
+        }
       : DEFAULT_SENTINEL_POLICY.vault,
     ledger: isJsonObject(rawConfig.ledger)
-      ? { ...DEFAULT_SENTINEL_POLICY.ledger, ...(rawConfig.ledger as Partial<SentinelPolicy['ledger']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.ledger,
+          ...(rawConfig.ledger as Partial<SentinelPolicy['ledger']>),
+        }
       : DEFAULT_SENTINEL_POLICY.ledger,
     hitl: isJsonObject(rawConfig.hitl)
-      ? { ...DEFAULT_SENTINEL_POLICY.hitl, ...(rawConfig.hitl as Partial<SentinelPolicy['hitl']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.hitl,
+          ...(rawConfig.hitl as Partial<SentinelPolicy['hitl']>),
+        }
       : DEFAULT_SENTINEL_POLICY.hitl,
     forensics: isJsonObject(rawConfig.forensics)
-      ? { ...DEFAULT_SENTINEL_POLICY.forensics, ...(rawConfig.forensics as Partial<SentinelPolicy['forensics']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.forensics,
+          ...(rawConfig.forensics as Partial<SentinelPolicy['forensics']>),
+        }
       : DEFAULT_SENTINEL_POLICY.forensics,
     telemetry: isJsonObject(rawConfig.telemetry)
-      ? { ...DEFAULT_SENTINEL_POLICY.telemetry, ...(rawConfig.telemetry as Partial<SentinelPolicy['telemetry']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.telemetry,
+          ...(rawConfig.telemetry as Partial<SentinelPolicy['telemetry']>),
+        }
       : DEFAULT_SENTINEL_POLICY.telemetry,
     macaroons: isJsonObject(rawConfig.macaroons)
-      ? { ...DEFAULT_SENTINEL_POLICY.macaroons, ...(rawConfig.macaroons as Partial<SentinelPolicy['macaroons']>) }
+      ? {
+          ...DEFAULT_SENTINEL_POLICY.macaroons,
+          ...(rawConfig.macaroons as Partial<SentinelPolicy['macaroons']>),
+        }
       : DEFAULT_SENTINEL_POLICY.macaroons,
   };
 
@@ -295,25 +340,23 @@ export class SentinelKernel {
     return this.handleGenericPassthrough(request, upstream);
   }
 
-  private emitAudit(
-    params: {
-      readonly requestId: string;
-      readonly traceparent: string;
-      readonly tenantId: string;
-      readonly sessionId: string;
-      readonly method: string;
-      readonly toolName?: string;
-      readonly outcome: AuditDecisionOutcome;
-      readonly stage: string;
-      readonly startedAtMicros: bigint;
-      readonly estimatedMicroUsd: number;
-      readonly settledMicroUsd: number;
-      readonly sanitizedArgs?: JsonObject;
-      readonly sentinelError?: SentinelError;
-      readonly reason?: string;
-      readonly pseudonymizedCount?: number;
-    },
-  ): ForensicAuditRecord | null {
+  private emitAudit(params: {
+    readonly requestId: string;
+    readonly traceparent: string;
+    readonly tenantId: string;
+    readonly sessionId: string;
+    readonly method: string;
+    readonly toolName?: string;
+    readonly outcome: AuditDecisionOutcome;
+    readonly stage: string;
+    readonly startedAtMicros: bigint;
+    readonly estimatedMicroUsd: number;
+    readonly settledMicroUsd: number;
+    readonly sanitizedArgs?: JsonObject;
+    readonly sentinelError?: SentinelError;
+    readonly reason?: string;
+    readonly pseudonymizedCount?: number;
+  }): ForensicAuditRecord | null {
     const elapsedMicros = Number(
       this.clock.nowMicros() >= params.startedAtMicros
         ? this.clock.nowMicros() - params.startedAtMicros
@@ -524,7 +567,6 @@ export class SentinelKernel {
     });
     const traceparent = formatTraceparent(ctx.trace);
 
-    // Sanitize preview of outbound arguments so forensic logs never store accidental raw secrets
     const outboundPreview = this.vault.pseudonymizeInbound({
       tenantId: ctx.tenantId,
       sessionId: ctx.sessionId,
@@ -587,7 +629,6 @@ export class SentinelKernel {
           const early = failOrShadow(trap.error);
           if (early !== null) return early;
         }
-        // In SHADOW mode, return realistic canary-laced decoy without hitting upstream
         this.emitAudit({
           requestId: ctx.requestId,
           traceparent,
@@ -963,7 +1004,9 @@ export class SentinelKernel {
       shadowFailures.push(shieldRes.error);
     }
 
-    const postShieldPayload = shieldRes.ok ? shieldRes.value.sanitizedPayload : upstreamResponse.result;
+    const postShieldPayload = shieldRes.ok
+      ? shieldRes.value.sanitizedPayload
+      : upstreamResponse.result;
     if (shieldRes.ok && shieldRes.value.findings.length > 0) {
       this.lattice.degradeIntegrity(ctx.sessionId, 'UNTRUSTED', `inbound_injection:${toolName}`);
     }
@@ -990,7 +1033,8 @@ export class SentinelKernel {
       labelApplied: this.lattice.getSessionLabel(ctx.sessionId),
       payloadSample: {
         pseudonymizedCount: inboundVaultReport.pseudonymizedCount,
-        baseLabel: updatedLabel,
+        baseConfidentiality: updatedLabel.confidentiality,
+        baseIntegrity: updatedLabel.integrity,
       },
     });
 
