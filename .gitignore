@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Test & coverage artifacts
+coverage/
+.vitest/
+
+# Runtime logs, forensic snapshots & local keys
+*.audit.jsonl
+*.forensic.json
+*.lockfile.json
+*.pem
+*.key
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# OS & Editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
