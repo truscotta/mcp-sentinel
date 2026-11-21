@@ -1,0 +1,74 @@
+{
+  "name": "mcp-sentinel",
+  "version": "1.0.0",
+  "description": "Zero-dependency TypeScript runtime security mesh & FinOps firewall for MCP and AI Agents.",
+  "license": "MIT",
+  "author": "Truscotta (https://github.com/truscotta)",
+  "homepage": "https://github.com/truscotta/mcp-sentinel#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/truscotta/mcp-sentinel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/truscotta/mcp-sentinel/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/truscotta"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "bin": {
+    "mcp-sentinel": "./dist/cli/bin.js"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "ai-security",
+    "ai-governance",
+    "zero-trust",
+    "prompt-injection",
+    "pii-redaction",
+    "finops",
+    "rate-limiting",
+    "merkle-tree",
+    "macaroons",
+    "typescript"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src ./tests",
+    "format": "biome format --write ./src ./tests",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "^20.17.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
