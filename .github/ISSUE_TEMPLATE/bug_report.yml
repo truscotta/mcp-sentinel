@@ -1,0 +1,62 @@
+name: 🐛 Bug Report
+description: Report a reproducible defect in the SentinelKernel, SPL VM, Vault, Ledger, or CLI Proxy.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a detailed bug report!
+        > **Security Note:** If this issue involves a security bypass (SSRF, Lattice escape, Vault leak, or VM DoS), **do not post it publicly**—please submit a [Private Security Advisory](https://github.com/truscotta/mcp-sentinel/security/advisories/new) instead.
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Affected Subsystem
+      options:
+        - Core Kernel / Execution Modes (ENFORCE / SHADOW / AUDIT_ONLY)
+        - SPL Compiler / Stack Bytecode VM (src/dsl)
+        - Capability Macaroons (src/capabilities)
+        - Dual Security Lattice / Provenance DAG (src/ifc)
+        - Mirage Honey-Tools / Canary Watermarks (src/deception)
+        - Schema Lock / Injection Shield / Kill-Switch (src/security)
+        - SimHash / Markov Call-Graph / Welford-CUSUM (src/intelligence)
+        - Payload Firewall / Rate Limiter / Circuit Breaker / Coalescer (src/guards)
+        - Reversible AES-256-GCM Context Vault (src/vault)
+        - 4-Tier Micro-USD Budget Ledger / HITL Gate (src/ledger, src/hitl)
+        - RFC-6962 Merkle Tree / Ed25519 / Replayer (src/forensics)
+        - Stdio Reverse Proxy / SDK Middleware / CLI / Prometheus SSE
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Node.js & mcp-sentinel Version
+      placeholder: "Node v22.11.0, mcp-sentinel v1.0.0, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal Reproduction (Policy JSON / JSON-RPC Payload)
+      description: Provide a minimal policy config or MCP `tools/call` payload that reproduces the issue.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. Actual Behavior
+      description: Include any Sentinel error code (`-32001`..`-32012`) or stack output observed.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: sponsor
+    attributes:
+      label: Priority Triage Status
+      options:
+        - label: My team or I actively back `@truscotta` on GitHub Sponsors (Pro / Silver / Gold tier)
