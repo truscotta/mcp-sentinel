@@ -26,13 +26,20 @@
     "enabled": true,
     "rules": {
       "recommended": true,
-      "suspicious": {
-        "noExplicitAny": "error"
+      "complexity": {
+        "recommended": false,
+        "noBannedTypes": "error",
+        "noUselessCatch": "error"
       },
       "style": {
+        "recommended": false,
         "noNonNullAssertion": "error",
         "useNodejsImportProtocol": "error",
         "useConst": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConfusingVoidType": "off"
       },
       "correctness": {
         "noUnusedVariables": "error",
