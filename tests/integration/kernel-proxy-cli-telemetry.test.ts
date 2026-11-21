@@ -1,9 +1,11 @@
-import { Buffer } from 'node:buffer';
-import { get as httpGet } from 'node:http';
+import type { Buffer } from 'node:buffer';
+import { get as httpGet, request as httpRequest } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import {
   createDefaultPolicy,
+  createJsonRpcErrorResponse,
+  createJsonRpcSuccessResponse,
   MacaroonCaveats,
   mergeSentinelPolicy,
   mintMacaroon,
@@ -13,8 +15,11 @@ import {
   SentinelProtectedRegistry,
   StdioReverseProxy,
   serializeMacaroon,
+  sha256Bytes,
   SplPolicyEngine,
   VirtualClock,
+  verifyConsistencyProof,
+  verifyInclusionProof,
 } from '../../src/index.js';
 
 function waitForLine(stream: PassThrough): Promise<string> {
@@ -32,9 +37,13 @@ function waitForLine(stream: PassThrough): Promise<string> {
   });
 }
 
-function fetchHttpText(port: number, path: string): Promise<{ status: number; body: string }> {
+function fetchHttpText(
+  port: number,
+  path: string,
+  method = 'GET',
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = httpGet({ host: '127.0.0.1', port, path }, (res) => {
+    const req = httpRequest({ host: '127.0.0.1', port, path, method }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => {
@@ -45,17 +54,28 @@ function fetchHttpText(port: number, path: string): Promise<{ status: number; bo
       });
     });
     req.on('error', reject);
+    req.end();
   });
 }
 
 describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Parser', () => {
-  it('governs SDK registry calls with Macaroons, Reversible Vault, Passthrough, and Shadow mode', async () => {
+  it('governs SDK registry calls, 11-stage enforcement branches, Forensics, and SPL VM', async () => {
+    expect(sha256Bytes('sentinel').byteLength).toBe(32);
+
     const rootSecret = 'integration-macaroon-root-secret-key';
     const clock = new VirtualClock();
 
     const mergedRes = mergeSentinelPolicy({
       mode: 'ENFORCE',
       macaroons: { enabled: true, rootKeyHex: rootSecret, metadataField: 'capabilityToken' },
+      splRules: [
+        {
+          id: 'deny-forbidden-tag',
+          priority: 100,
+          effect: 'DENY',
+          expression: 'args.mode == "forbidden"',
+        },
+      ],
       lattice: {
         enabled: true,
         toolClassifications: {
@@ -71,6 +91,12 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
             maxSinkConfidentiality: 'CONFIDENTIAL',
             minRequiredIntegrity: 'UNTRUSTED',
           },
+          public_sink: {
+            readConfidentiality: 'PUBLIC',
+            readIntegrity: 'VERIFIED',
+            maxSinkConfidentiality: 'PUBLIC',
+            minRequiredIntegrity: 'UNTRUSTED',
+          },
         },
       },
     });
@@ -80,24 +106,34 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     const kernelRes = SentinelKernel.create(mergedRes.value, { clock });
     expect(kernelRes.ok).toBe(true);
     if (!kernelRes.ok) return;
+    const kernel = kernelRes.value;
+
+    let observedAuditEvents = 0;
+    const unsubscribe = kernel.flightRecorder.subscribe(() => {
+      observedAuditEvents += 1;
+    });
 
     // Exercise Tenant & Global KillSwitch lock/unlock lifecycle
-    kernelRes.value.killSwitch.lockTenant('locked-tenant', {
+    kernel.killSwitch.lockTenant('locked-tenant', {
       reason: 'security drill',
       triggeredByStage: 'test',
     });
-    expect(kernelRes.value.killSwitch.assertPermitted('locked-tenant', 's1').ok).toBe(false);
-    expect(kernelRes.value.killSwitch.unlockTenant('locked-tenant')).toBe(true);
+    expect(kernel.killSwitch.assertPermitted('locked-tenant', 's1').ok).toBe(false);
+    expect(kernel.killSwitch.unlockTenant('locked-tenant')).toBe(true);
 
-    kernelRes.value.killSwitch.lockGlobal({
+    kernel.killSwitch.lockGlobal({
       reason: 'maintenance window',
       triggeredByStage: 'test',
     });
-    expect(kernelRes.value.killSwitch.assertPermitted('any-tenant', 's1').ok).toBe(false);
-    expect(kernelRes.value.killSwitch.unlockGlobal()).toBe(true);
+    const blockedPassthrough = await kernel.handleRequest(
+      { jsonrpc: '2.0', id: 'p1', method: 'prompts/list' },
+      async (req) => createJsonRpcSuccessResponse(req.id, { prompts: [] }),
+    );
+    expect('error' in blockedPassthrough && blockedPassthrough.error.code).toBe(-32008);
+    expect(kernel.killSwitch.unlockGlobal()).toBe(true);
 
     // Exercise resources/read generic passthrough with inbound PII pseudonymization
-    const resourceResp = await kernelRes.value.handleRequest(
+    const resourceResp = await kernel.handleRequest(
       {
         jsonrpc: '2.0',
         id: 'res_1',
@@ -113,7 +149,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('result' in resourceResp).toBe(true);
     expect(JSON.stringify(resourceResp)).not.toContain('director@corp.example');
 
-    const registry = new SentinelProtectedRegistry(kernelRes.value);
+    const registry = new SentinelProtectedRegistry(kernel);
     let deliveredPlaintextEmail = '';
 
     registry
@@ -135,6 +171,14 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
           deliveredPlaintextEmail = String(args.to ?? '');
           return { sent: true };
         },
+      )
+      .registerTool(
+        {
+          name: 'public_sink',
+          description: 'Post message publicly',
+          inputSchema: { type: 'object' },
+        },
+        async () => ({ ok: true }),
       );
 
     const listResp = await registry.listTools();
@@ -149,7 +193,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('error' in noCapResp && noCapResp.error.code).toBe(-32009);
 
     const macRes = mintMacaroon(rootSecret, {
-      caveats: [MacaroonCaveats.allowTools(['crm_*', 'internal_*'])],
+      caveats: [MacaroonCaveats.allowTools(['crm_*', 'internal_*', 'public_*'])],
     });
     expect(macRes.ok).toBe(true);
     if (!macRes.ok) return;
@@ -166,6 +210,15 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     const aliasMatch = /syn_[0-9a-f]{10}@sentinel\.vault/.exec(rawRespText);
     expect(aliasMatch).not.toBeNull();
 
+    // Idempotency CACHE_HIT on identical repeat call
+    const cachedLookup = await registry.callTool(
+      'crm_lookup',
+      { id: 1 },
+      { capabilityToken: token, sessionId: 's-e2e' },
+    );
+    expect('result' in cachedLookup).toBe(true);
+
+    // Authorized detokenization into CONFIDENTIAL sink
     const mailResp = await registry.callTool(
       'internal_mailer',
       { to: aliasMatch?.[0] ?? '' },
@@ -174,14 +227,89 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('result' in mailResp).toBe(true);
     expect(deliveredPlaintextEmail).toBe('vip@clientcorp.com');
 
-    // Exercise additional SPL operators & built-ins
+    // Bell-LaPadula Lattice Violation when CONFIDENTIAL session calls PUBLIC sink
+    const latticeBlocked = await registry.callTool(
+      'public_sink',
+      { msg: 'hello' },
+      { capabilityToken: token, sessionId: 's-e2e' },
+    );
+    expect('error' in latticeBlocked && latticeBlocked.error.code).toBe(-32006);
+
+    // SPL DENY rule & Firewall SSRF block on clean session
+    const splDenied = await registry.callTool(
+      'internal_mailer',
+      { mode: 'forbidden' },
+      { capabilityToken: token, sessionId: 's-clean' },
+    );
+    expect('error' in splDenied && splDenied.error.code).toBe(-32001);
+
+    const ssrfDenied = await registry.callTool(
+      'internal_mailer',
+      { callback: 'http://127.0.0.1:9000/internal' },
+      { capabilityToken: token, sessionId: 's-clean' },
+    );
+    expect('error' in ssrfDenied && ssrfDenied.error.code).toBe(-32001);
+
+    // Honey-Tool trigger in ENFORCE mode locks session; unlockSession restores access
+    const honeyBlocked = await registry.callTool(
+      'admin_export_master_credentials',
+      {},
+      { capabilityToken: token, sessionId: 's-honey' },
+    );
+    expect('error' in honeyBlocked && honeyBlocked.error.code).toBe(-32010);
+    expect(kernel.killSwitch.unlockSession('s-honey')).toBe(true);
+
+    // Upstream throw & RPC error rollback paths in SentinelKernel
+    const noMacKernelRes = SentinelKernel.create(createDefaultPolicy({ mode: 'ENFORCE' }), {
+      clock,
+    });
+    expect(noMacKernelRes.ok).toBe(true);
+    if (noMacKernelRes.ok) {
+      const nk = noMacKernelRes.value;
+      const throwResp = await nk.handleRequest(
+        {
+          jsonrpc: '2.0',
+          id: 'err_1',
+          method: 'tools/call',
+          params: { name: 'flaky_tool', arguments: {} },
+        },
+        async () => {
+          throw new Error('socket hang up');
+        },
+      );
+      expect('error' in throwResp && throwResp.error.code).toBe(-32603);
+
+      const rpcErrResp = await nk.handleRequest(
+        {
+          jsonrpc: '2.0',
+          id: 'err_2',
+          method: 'tools/call',
+          params: { name: 'rpc_err_tool', arguments: {} },
+        },
+        async (req) =>
+          createJsonRpcErrorResponse(req.id, { code: -32099, message: 'upstream failed' }),
+      );
+      expect('error' in rpcErrResp && rpcErrResp.error.code).toBe(-32099);
+    }
+
+    // ForensicFlightRecorder live proof & root helpers
+    expect(observedAuditEvents).toBeGreaterThan(0);
+    expect(kernel.flightRecorder.getRecentRecords().length).toBeGreaterThan(0);
+    expect(kernel.flightRecorder.getCurrentRootHashHex().ok).toBe(true);
+    const incProof = kernel.flightRecorder.proveInclusion(0);
+    expect(incProof.ok && verifyInclusionProof(incProof.value)).toBe(true);
+    const consProof = kernel.flightRecorder.proveConsistency(1);
+    expect(consProof.ok && verifyConsistencyProof(consProof.value)).toBe(true);
+    unsubscribe();
+
+    // Exercise rich SPL operators, comments, escapes, arrays, arithmetic & built-ins
     const splExtra = SplPolicyEngine.compile([
       {
-        id: 'arithmetic-and-string-ops',
+        id: 'rich-operators',
         priority: 10,
         effect: 'DENY',
         expression:
-          '!false and exists(args.tag) and contains(upper(args.tag), "PROD") and ends_with(args.tag, "_v1") and args.size() + 10 - 2 * 3 > 4 and cost.session_usd() >= 0',
+          '# policy comment\n!false && (false || exists(args.tag)) and args.tag != "skip\\n" and contains(upper(args.tag), "PROD") and ends_with(args.tag, "_v1") and -5 < 0 and 10 / 2 >= 5 and 11 % 3 <= 2 and size([1, 2, 3]) == 3 and args.size() > 0 and cost.session_usd() >= 0',
       },
     ]);
     expect(splExtra.ok).toBe(true);
@@ -215,7 +343,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     }
   });
 
-  it('proxies newline-delimited JSON-RPC over Stdio streams and serves Prometheus /healthz & /metrics', async () => {
+  it('proxies JSON-RPC over Stdio streams and serves Prometheus /healthz, /metrics & live SSE /events', async () => {
     const clock = new VirtualClock();
     const obs = new ObservabilityServer({ enabled: true, host: '127.0.0.1', port: 0 }, clock);
     const kernelRes = SentinelKernel.create(
@@ -224,6 +352,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     );
     expect(kernelRes.ok).toBe(true);
     if (!kernelRes.ok) return;
+    const kernel = kernelRes.value;
 
     const hostInput = new PassThrough();
     const hostOutput = new PassThrough();
@@ -250,7 +379,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     });
 
     const proxy = new StdioReverseProxy({
-      kernel: kernelRes.value,
+      kernel,
       upstream: { childStdin, childStdout },
       hostInput,
       hostOutput,
@@ -272,6 +401,11 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       const parsedReply = JSON.parse(replyLine) as { readonly id: number };
       expect(parsedReply.id).toBe(77);
 
+      // JSON-RPC notification pass-through
+      hostInput.write(
+        `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`,
+      );
+
       const errPromise = waitForLine(hostOutput);
       hostInput.write('not-valid-json\n');
       const errLine = await errPromise;
@@ -288,8 +422,46 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
         expect(metrics.status).toBe(200);
         expect(metrics.body).toContain('mcp_sentinel_requests_total');
 
+        const methodNotAllowed = await fetchHttpText(boundPort, '/healthz', 'POST');
+        expect(methodNotAllowed.status).toBe(405);
+
         const notFound = await fetchHttpText(boundPort, '/unknown');
         expect(notFound.status).toBe(404);
+
+        // Verify live SSE /events streaming frame delivery
+        const sseDelivered = await new Promise<boolean>((resolve, reject) => {
+          const req = httpGet({ host: '127.0.0.1', port: boundPort, path: '/events' }, (res) => {
+            let acc = '';
+            let emitted = false;
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => {
+              acc += chunk;
+              if (!emitted && acc.includes(': connected')) {
+                emitted = true;
+                void kernel.handleRequest(
+                  {
+                    jsonrpc: '2.0',
+                    id: 'sse_1',
+                    method: 'tools/call',
+                    params: { name: 'sse_probe', arguments: {} },
+                  },
+                  async (r) => createJsonRpcSuccessResponse(r.id, { ok: true }),
+                );
+              }
+              if (acc.includes('event: audit')) {
+                req.destroy();
+                resolve(true);
+              }
+            });
+            res.on('error', () => {});
+          });
+          req.on('error', (errObj: NodeJS.ErrnoException) => {
+            if (errObj.code !== 'ECONNRESET') {
+              reject(errObj);
+            }
+          });
+        });
+        expect(sseDelivered).toBe(true);
       }
     } finally {
       await proxy.stop();
@@ -308,8 +480,12 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       'sentinel.json',
       '--mode',
       'SHADOW',
+      '--audit-log',
+      'out.jsonl',
       '--metrics-port',
       '9464',
+      '--timeout-ms',
+      '5000',
       '--',
       'npx',
       '-y',
@@ -320,6 +496,7 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       expect(proxyCmd.value.command).toBe('npx');
       expect(proxyCmd.value.mode).toBe('SHADOW');
       expect(proxyCmd.value.metricsPort).toBe(9464);
+      expect(proxyCmd.value.upstreamTimeoutMs).toBe(5000);
     }
 
     expect(parseCliArgs(['compile-policy', '--config', 'p.json']).ok).toBe(true);
