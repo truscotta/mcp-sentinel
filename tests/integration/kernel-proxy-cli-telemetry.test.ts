@@ -113,7 +113,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       observedAuditEvents += 1;
     });
 
-    // Exercise Tenant & Global KillSwitch lock/unlock lifecycle
     kernel.killSwitch.lockTenant('locked-tenant', {
       reason: 'security drill',
       triggeredByStage: 'test',
@@ -132,7 +131,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('error' in blockedPassthrough && blockedPassthrough.error.code).toBe(-32008);
     expect(kernel.killSwitch.unlockGlobal()).toBe(true);
 
-    // Exercise resources/read generic passthrough with inbound PII pseudonymization
     const resourceResp = await kernel.handleRequest(
       {
         jsonrpc: '2.0',
@@ -210,7 +208,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     const aliasMatch = /syn_[0-9a-f]{10}@sentinel\.vault/.exec(rawRespText);
     expect(aliasMatch).not.toBeNull();
 
-    // Idempotency CACHE_HIT on identical repeat call
     const cachedLookup = await registry.callTool(
       'crm_lookup',
       { id: 1 },
@@ -218,7 +215,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     );
     expect('result' in cachedLookup).toBe(true);
 
-    // Authorized detokenization into CONFIDENTIAL sink
     const mailResp = await registry.callTool(
       'internal_mailer',
       { to: aliasMatch?.[0] ?? '' },
@@ -227,7 +223,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('result' in mailResp).toBe(true);
     expect(deliveredPlaintextEmail).toBe('vip@clientcorp.com');
 
-    // Bell-LaPadula Lattice Violation when CONFIDENTIAL session calls PUBLIC sink
     const latticeBlocked = await registry.callTool(
       'public_sink',
       { msg: 'hello' },
@@ -235,7 +230,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     );
     expect('error' in latticeBlocked && latticeBlocked.error.code).toBe(-32006);
 
-    // SPL DENY rule & Firewall SSRF block on clean session
     const splDenied = await registry.callTool(
       'internal_mailer',
       { mode: 'forbidden' },
@@ -250,7 +244,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     );
     expect('error' in ssrfDenied && ssrfDenied.error.code).toBe(-32001);
 
-    // Honey-Tool trigger in ENFORCE mode locks session; unlockSession restores access
     const honeyBlocked = await registry.callTool(
       'admin_export_master_credentials',
       {},
@@ -259,7 +252,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('error' in honeyBlocked && honeyBlocked.error.code).toBe(-32010);
     expect(kernel.killSwitch.unlockSession('s-honey')).toBe(true);
 
-    // Upstream throw & RPC error rollback paths in SentinelKernel
     const noMacKernelRes = SentinelKernel.create(createDefaultPolicy({ mode: 'ENFORCE' }), {
       clock,
     });
@@ -292,7 +284,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       expect('error' in rpcErrResp && rpcErrResp.error.code).toBe(-32099);
     }
 
-    // ForensicFlightRecorder live proof & root helpers
     expect(observedAuditEvents).toBeGreaterThan(0);
     expect(kernel.flightRecorder.getRecentRecords().length).toBeGreaterThan(0);
     expect(kernel.flightRecorder.getCurrentRootHashHex().ok).toBe(true);
@@ -302,7 +293,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect(consProof.ok && verifyConsistencyProof(consProof.value)).toBe(true);
     unsubscribe();
 
-    // Exercise rich SPL operators, comments, escapes, arrays, arithmetic & built-ins
     const splExtra = SplPolicyEngine.compile([
       {
         id: 'rich-operators',
@@ -401,7 +391,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       const parsedReply = JSON.parse(replyLine) as { readonly id: number };
       expect(parsedReply.id).toBe(77);
 
-      // JSON-RPC notification pass-through
       hostInput.write(
         `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`,
       );
@@ -428,7 +417,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
         const notFound = await fetchHttpText(boundPort, '/unknown');
         expect(notFound.status).toBe(404);
 
-        // Verify live SSE /events streaming frame delivery
         const sseDelivered = await new Promise<boolean>((resolve, reject) => {
           const req = httpGet({ host: '127.0.0.1', port: boundPort, path: '/events' }, (res) => {
             let acc = '';
