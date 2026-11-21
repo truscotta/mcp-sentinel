@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { get as httpGet } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +13,7 @@ import {
   SentinelProtectedRegistry,
   StdioReverseProxy,
   serializeMacaroon,
+  SplPolicyEngine,
   VirtualClock,
 } from '../../src/index.js';
 
@@ -47,7 +49,7 @@ function fetchHttpText(port: number, path: string): Promise<{ status: number; bo
 }
 
 describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Parser', () => {
-  it('governs SDK registry calls with Macaroons, Reversible Vault, and Shadow mode', async () => {
+  it('governs SDK registry calls with Macaroons, Reversible Vault, Passthrough, and Shadow mode', async () => {
     const rootSecret = 'integration-macaroon-root-secret-key';
     const clock = new VirtualClock();
 
@@ -79,6 +81,38 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect(kernelRes.ok).toBe(true);
     if (!kernelRes.ok) return;
 
+    // Exercise Tenant & Global KillSwitch lock/unlock lifecycle
+    kernelRes.value.killSwitch.lockTenant('locked-tenant', {
+      reason: 'security drill',
+      triggeredByStage: 'test',
+    });
+    expect(kernelRes.value.killSwitch.assertPermitted('locked-tenant', 's1').ok).toBe(false);
+    expect(kernelRes.value.killSwitch.unlockTenant('locked-tenant')).toBe(true);
+
+    kernelRes.value.killSwitch.lockGlobal({
+      reason: 'maintenance window',
+      triggeredByStage: 'test',
+    });
+    expect(kernelRes.value.killSwitch.assertPermitted('any-tenant', 's1').ok).toBe(false);
+    expect(kernelRes.value.killSwitch.unlockGlobal()).toBe(true);
+
+    // Exercise resources/read generic passthrough with inbound PII pseudonymization
+    const resourceResp = await kernelRes.value.handleRequest(
+      {
+        jsonrpc: '2.0',
+        id: 'res_1',
+        method: 'resources/read',
+        params: { uri: 'file:///crm/contacts.txt' },
+      },
+      async (req) => ({
+        jsonrpc: '2.0',
+        id: req.id,
+        result: { text: 'Lead contact: director@corp.example' },
+      }),
+    );
+    expect('result' in resourceResp).toBe(true);
+    expect(JSON.stringify(resourceResp)).not.toContain('director@corp.example');
+
     const registry = new SentinelProtectedRegistry(kernelRes.value);
     let deliveredPlaintextEmail = '';
 
@@ -103,7 +137,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
         },
       );
 
-    // Discovery strips <IMPORTANT> poison and injects Honey-Tool
     const listResp = await registry.listTools();
     expect('result' in listResp).toBe(true);
     if ('result' in listResp) {
@@ -112,11 +145,9 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       expect(serializedList).toContain('admin_export_master_credentials');
     }
 
-    // Missing Macaroon is denied
     const noCapResp = await registry.callTool('crm_lookup', { id: 1 });
     expect('error' in noCapResp && noCapResp.error.code).toBe(-32009);
 
-    // Valid Macaroon succeeds, pseudonymizes email for LLM, then detokenizes for internal_mailer
     const macRes = mintMacaroon(rootSecret, {
       caveats: [MacaroonCaveats.allowTools(['crm_*', 'internal_*'])],
     });
@@ -143,7 +174,35 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     expect('result' in mailResp).toBe(true);
     expect(deliveredPlaintextEmail).toBe('vip@clientcorp.com');
 
-    // SHADOW mode flags Honey-Tool trap without blocking and returns canary-laced decoy
+    // Exercise additional SPL operators & built-ins
+    const splExtra = SplPolicyEngine.compile([
+      {
+        id: 'arithmetic-and-string-ops',
+        priority: 10,
+        effect: 'DENY',
+        expression:
+          '!false and exists(args.tag) and contains(upper(args.tag), "PROD") and ends_with(args.tag, "_v1") and args.size() + 10 - 2 * 3 > 4 and cost.session_usd() >= 0',
+      },
+    ]);
+    expect(splExtra.ok).toBe(true);
+    if (splExtra.ok) {
+      const evalExtra = splExtra.value.evaluate({
+        method: 'tools/call',
+        toolName: 'deploy',
+        args: { tag: 'release_prod_v1' },
+        tenantId: 't1',
+        sessionId: 's1',
+        confidentiality: 'PUBLIC',
+        integrity: 'VERIFIED',
+        taintLabels: [],
+        toolCategories: [],
+        sessionSpentMicroUsd: 1_000,
+        estimatedCallMicroUsd: 500,
+        payloadBytes: 32,
+      });
+      expect(evalExtra.ok && evalExtra.value.action).toBe('DENY');
+    }
+
     const shadowKernelRes = SentinelKernel.create(createDefaultPolicy({ mode: 'SHADOW' }), {
       clock,
     });
@@ -171,7 +230,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
     const childStdin = new PassThrough();
     const childStdout = new PassThrough();
 
-    // Simulated upstream MCP server responding on childStdin -> childStdout
     childStdin.on('data', (chunk: Buffer) => {
       const lines = chunk
         .toString()
@@ -214,7 +272,6 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
       const parsedReply = JSON.parse(replyLine) as { readonly id: number };
       expect(parsedReply.id).toBe(77);
 
-      // Invalid JSON yields JSON-RPC PARSE_ERROR (-32700)
       const errPromise = waitForLine(hostOutput);
       hostInput.write('not-valid-json\n');
       const errLine = await errPromise;
@@ -240,10 +297,11 @@ describe('End-to-End SentinelKernel, StdioReverseProxy, SDK, Telemetry & CLI Par
   });
 
   it('parses all 6 CLI subcommands and rejects malformed CLI flags cleanly', () => {
-    expect(parseCliArgs([]).ok && parseCliArgs([]).value.kind).toBe('help');
-    expect(parseCliArgs(['--version']).ok && parseCliArgs(['--version']).value.kind).toBe(
-      'version',
-    );
+    const helpCmd = parseCliArgs([]);
+    expect(helpCmd.ok && helpCmd.value.kind).toBe('help');
+
+    const versionCmd = parseCliArgs(['--version']);
+    expect(versionCmd.ok && versionCmd.value.kind).toBe('version');
 
     const proxyCmd = parseCliArgs([
       '--config',
