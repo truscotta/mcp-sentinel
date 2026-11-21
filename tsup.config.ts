@@ -6,7 +6,11 @@ export default defineConfig({
     'cli/bin': 'src/cli/bin.ts',
   },
   format: ['esm', 'cjs'],
-  dts: true,
+  dts: {
+    entry: {
+      index: 'src/index.ts',
+    },
+  },
   tsconfig: 'tsconfig.build.json',
   target: 'node20',
   platform: 'node',
