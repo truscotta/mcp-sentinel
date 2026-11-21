@@ -69,10 +69,6 @@ export class CusumAnomalyDetector {
     return Math.sqrt(state.m2 / (state.count - 1));
   }
 
-  /**
-   * Non-mutating pre-flight check against current session statistics before
-   * reserving Micro-USD in the ledger.
-   */
   public checkProjectedSpend(
     sessionId: string,
     estimatedMicroUsd: number,
@@ -155,15 +151,10 @@ export class CusumAnomalyDetector {
     return ok(snapshot);
   }
 
-  /**
-   * Commits an executed call's actual Micro-USD spend into Page's upper CUSUM
-   * accumulator and updates Welford's reference baseline when in-control.
-   */
   public recordActualSpend(sessionId: string, actualMicroUsd: number): SpendAnomalySnapshot {
     const x = Math.max(0, Math.floor(actualMicroUsd));
     const state = this.getOrCreateState(sessionId);
 
-    // Calibration window: establish initial in-control baseline (mu_0, sigma_0)
     if (state.count < MIN_SAMPLES_FOR_ZSCORE) {
       state.count += 1;
       const delta = x - state.mean;
@@ -194,7 +185,6 @@ export class CusumAnomalyDetector {
     const isZScoreSpike = zScore > this.config.zScoreThreshold;
     const isCusumDriftBreach = state.cusumPlus > this.config.cusumThresholdMicroUsd;
 
-    // Poison-resistant baseline: only adapt reference mean/variance on in-control observations
     if (state.cusumPlus === 0 && !isZScoreSpike) {
       state.count += 1;
       const delta = x - state.mean;
