@@ -24,8 +24,8 @@ const MIN_SAMPLES_FOR_ZSCORE = 5;
 /**
  * Dual Statistical FinOps Burn-Rate Detector combining:
  * 1. Welford's O(1) numerically stable online variance for instant Z-score spike detection.
- * 2. Page's Upper Tabular CUSUM sequential change-point test to catch stealthy,
- *    sustained "salami-slicing" budget drains below single-call spike limits.
+ * 2. Page's Upper Tabular CUSUM sequential change-point test with a poison-resistant
+ *    in-control reference baseline to catch stealthy "salami-slicing" budget drains.
  */
 export class CusumAnomalyDetector {
   private readonly config: IntelligenceConfig;
@@ -156,45 +156,61 @@ export class CusumAnomalyDetector {
   }
 
   /**
-   * Commits an executed call's actual Micro-USD spend into Welford's online
-   * variance accumulator and Page's upper CUSUM statistic.
+   * Commits an executed call's actual Micro-USD spend into Page's upper CUSUM
+   * accumulator and updates Welford's reference baseline when in-control.
    */
   public recordActualSpend(sessionId: string, actualMicroUsd: number): SpendAnomalySnapshot {
     const x = Math.max(0, Math.floor(actualMicroUsd));
     const state = this.getOrCreateState(sessionId);
 
-    const prevMean = state.mean;
-    const prevStdDev = this.computeStdDev(state);
-    const zScore =
-      state.count >= MIN_SAMPLES_FOR_ZSCORE && prevStdDev > 0 ? (x - prevMean) / prevStdDev : 0;
+    // Calibration window: establish initial in-control baseline (mu_0, sigma_0)
+    if (state.count < MIN_SAMPLES_FOR_ZSCORE) {
+      state.count += 1;
+      const delta = x - state.mean;
+      state.mean += delta / state.count;
+      const delta2 = x - state.mean;
+      state.m2 += delta * delta2;
 
-    if (state.count > 0) {
-      state.cusumPlus = Math.max(
-        0,
-        state.cusumPlus + (x - prevMean - this.config.cusumDriftMicroUsd),
-      );
+      return {
+        sampleCount: state.count,
+        meanMicroUsd: state.mean,
+        stdDevMicroUsd: this.computeStdDev(state),
+        zScore: 0,
+        cusumHighMicroUsd: 0,
+        isZScoreSpike: false,
+        isCusumDriftBreach: false,
+      };
     }
 
-    // Welford's recurrence relation
-    state.count += 1;
-    const delta = x - state.mean;
-    state.mean += delta / state.count;
-    const delta2 = x - state.mean;
-    state.m2 += delta * delta2;
+    const baselineMean = state.mean;
+    const baselineStdDev = this.computeStdDev(state);
+    const zScore = baselineStdDev > 0 ? (x - baselineMean) / baselineStdDev : 0;
 
-    const updatedStdDev = this.computeStdDev(state);
+    state.cusumPlus = Math.max(
+      0,
+      state.cusumPlus + (x - baselineMean - this.config.cusumDriftMicroUsd),
+    );
+
+    const isZScoreSpike = zScore > this.config.zScoreThreshold;
+    const isCusumDriftBreach = state.cusumPlus > this.config.cusumThresholdMicroUsd;
+
+    // Poison-resistant baseline: only adapt reference mean/variance on in-control observations
+    if (state.cusumPlus === 0 && !isZScoreSpike) {
+      state.count += 1;
+      const delta = x - state.mean;
+      state.mean += delta / state.count;
+      const delta2 = x - state.mean;
+      state.m2 += delta * delta2;
+    }
 
     return {
       sampleCount: state.count,
       meanMicroUsd: state.mean,
-      stdDevMicroUsd: updatedStdDev,
+      stdDevMicroUsd: this.computeStdDev(state),
       zScore,
       cusumHighMicroUsd: state.cusumPlus,
-      isZScoreSpike:
-        state.count > MIN_SAMPLES_FOR_ZSCORE && zScore > this.config.zScoreThreshold,
-      isCusumDriftBreach:
-        state.count > MIN_SAMPLES_FOR_ZSCORE &&
-        state.cusumPlus > this.config.cusumThresholdMicroUsd,
+      isZScoreSpike,
+      isCusumDriftBreach,
     };
   }
 
