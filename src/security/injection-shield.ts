@@ -61,7 +61,8 @@ const INBOUND_SIGNATURES: readonly SignatureSpec[] = [
   {
     id: 'MARKDOWN_EXFILTRATION_BEACON',
     severity: 'HIGH',
-    description: 'Markdown image beacon with query string designed for zero-click data exfiltration',
+    description:
+      'Markdown image beacon with query string designed for zero-click data exfiltration',
     detectRegex: /!\[[^\]]*\]\(https?:\/\/[^)\s]+\?[^)\s]+=/i,
     neutralize: (input) =>
       input.replace(
@@ -127,15 +128,11 @@ export class InjectionShield {
     }
 
     const findingsMap = new Map<string, InjectionFinding>();
-    let highestSeverity: InjectionSeverity = 'NONE';
     let wasModified = false;
 
     const recordFinding = (finding: InjectionFinding): void => {
       if (!findingsMap.has(finding.ruleId)) {
         findingsMap.set(finding.ruleId, finding);
-      }
-      if (SEVERITY_RANK[finding.severity] > SEVERITY_RANK[highestSeverity]) {
-        highestSeverity = finding.severity;
       }
     };
 
@@ -201,6 +198,13 @@ export class InjectionShield {
 
     const sanitizedPayload = walk(payload, 0);
     const findings = Array.from(findingsMap.values());
+
+    let highestSeverity: InjectionSeverity = 'NONE';
+    for (const finding of findings) {
+      if (SEVERITY_RANK[finding.severity] > SEVERITY_RANK[highestSeverity]) {
+        highestSeverity = finding.severity;
+      }
+    }
 
     if (this.config.blockOnCriticalInjection && highestSeverity === 'CRITICAL') {
       return err(
