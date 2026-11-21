@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import process from 'node:process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
@@ -60,7 +60,7 @@ export class StdioReverseProxy {
   private readonly hostOutput: Writable;
   private readonly upstreamTimeoutMs: number;
 
-  private childProcess: ChildProcessWithoutNullStreams | null = null;
+  private childProcess: ChildProcess | null = null;
   private hostReader: ReadlineInterface | null = null;
   private childReader: ReadlineInterface | null = null;
   private childWritable: Writable | null = null;
@@ -193,7 +193,6 @@ export class StdioReverseProxy {
       return;
     }
 
-    // Notifications (`jsonrpc: "2.0"`, `method` without `id`) pass straight through when unlocked
     if (isJsonObject(parsed) && parsed.jsonrpc === '2.0' && typeof parsed.method === 'string') {
       this.writeToChild(parsed);
       return;
@@ -276,7 +275,6 @@ export class StdioReverseProxy {
       }
     }
 
-    // Forward server-initiated notifications or unsolicited messages transparently
     if (isJsonObject(parsed) && parsed.jsonrpc === '2.0') {
       this.writeToHost(parsed);
     }
