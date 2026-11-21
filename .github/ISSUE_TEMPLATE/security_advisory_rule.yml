@@ -1,0 +1,40 @@
+name: 🛡️ Detection Rule / Policy Proposal
+description: Propose a new SPL policy template, prompt-injection signature, SSRF vector, or Honey-Tool preset.
+title: "[Rule]: "
+labels: ["security", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to propose **defensive detection rules** for new MCP threats or agent attack patterns.
+        > ⚠️ **Do NOT report unpatched vulnerabilities in `mcp-sentinel` itself here.** Use [Private Vulnerability Reporting](https://github.com/truscotta/mcp-sentinel/security/advisories/new).
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Rule Category
+      options:
+        - SPL Policy Expression (src/dsl)
+        - Inbound Indirect Prompt Injection Signature (src/security/injection-shield.ts)
+        - Tool Poisoning / Unicode Smuggling Pattern (src/security/schema-lock.ts)
+        - SSRF / Path Traversal / Destructive Command Vector (src/guards/payload-firewall.ts)
+        - Mirage Honey-Tool Preset (src/deception/mirage-tools.ts)
+        - Secret / PII Scanner Pattern (src/vault/luhn-and-entropy.ts)
+    validations:
+      required: true
+
+  - type: textarea
+    id: threat_model
+    attributes:
+      label: Threat Scenario & Real-World Attack Vector
+      description: Describe how an attacker or rogue MCP server exploits an AI agent in this scenario.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample_payloads
+    attributes:
+      label: True-Positive & True-Negative Test Vectors
+      description: Provide at least 1 malicious sample that MUST be caught and 1 benign sample that MUST NOT false-positive.
+    validations:
+      required: true
