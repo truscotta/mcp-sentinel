@@ -1,0 +1,90 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '🛡️ Security Mesh, Lattice IFC & Cryptographic Vault'
+    labels:
+      - 'security'
+      - 'cryptography'
+      - 'ifc'
+  - title: '🚀 Features & FinOps Ledger'
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'finops'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: '⚡ Performance & Bytecode VM'
+    labels:
+      - 'performance'
+      - 'refactor'
+  - title: '📚 Documentation & Community'
+    labels:
+      - 'documentation'
+      - 'docs'
+  - title: '🧰 CI/CD & Maintenance'
+    labels:
+      - 'ci'
+      - 'chore'
+      - 'infrastructure'
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'security'
+  patch:
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+      - 'performance'
+      - 'refactor'
+      - 'docs'
+      - 'chore'
+  default: patch
+autolabeler:
+  - label: 'security'
+    files:
+      - 'src/security/**'
+      - 'src/ifc/**'
+      - 'src/deception/**'
+      - 'src/vault/**'
+      - 'src/capabilities/**'
+  - label: 'finops'
+    files:
+      - 'src/ledger/**'
+      - 'src/intelligence/**'
+  - label: 'enhancement'
+    branch:
+      - '/^feat\/.+/'
+  - label: 'fix'
+    branch:
+      - '/^fix\/.+/'
+  - label: 'documentation'
+    files:
+      - '*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  - label: 'ci'
+    files:
+      - '.github/workflows/**'
+template: |
+  ## What's Changed in mcp-sentinel v$RESOLVED_VERSION
+
+  $CHANGES
+
+  ---
+
+  ### 🔍 Cryptographic & Zero-Dependency Verification
+  - **Runtime Dependencies:** `0` (Pure Node.js `>=20.11` built-in primitives)
+  - **Audit Compatibility:** RFC-6962 Binary Merkle Tree + Ed25519 `STH-v1`
+
+  💜 **Sponsor Sustainable AI Security Infrastructure:** [GitHub Sponsors (@truscotta)](https://github.com/sponsors/truscotta)
